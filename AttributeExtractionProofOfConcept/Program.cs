@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO;
+using CSCore;
+using CSCore.Codecs;
+using CSCore.DSP;
 
 namespace AttributeExtractionProofOfConcept
 {
@@ -10,12 +14,21 @@ namespace AttributeExtractionProofOfConcept
     {
         static void Main(string[] args)
         {
-            // The code provided will print ‘Hello World’ to the console.
-            // Press Ctrl+F5 (or go to Debug > Start Without Debugging) to run your app.
-            Console.WriteLine("Hello World!");
-            Console.ReadKey();
+            if (args.Length != 1)
+            {
+                Console.WriteLine("Provide a valid music file location (mp3, wav, or m4a)");
+                return;
+            }
 
-            // Go to http://aka.ms/dotnet-get-started-console to continue learning how to build a console app! 
+            string filename = args[0];
+
+            if (!File.Exists(filename))
+            {
+                Console.Error.WriteLine("Could not file: '{0}'", filename);
+                return;
+            }
+
+            IWaveSource source = CodecFactory.Instance.GetCodec(filename);
         }
     }
 }
