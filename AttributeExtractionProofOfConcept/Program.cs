@@ -15,7 +15,6 @@ namespace AttributeExtractionProofOfConcept
     {
         /// <summary>
         /// Simple function to find the index of the max value in a double array
-        /// Thanks Jon Skeet: https://stackoverflow.com/a/462725
         /// </summary>
         /// <param name="sequence"></param>
         /// <returns></returns>
@@ -37,6 +36,23 @@ namespace AttributeExtractionProofOfConcept
             }
 
             return maxIndex;
+        }
+
+        /// <summary>
+        /// Produces a timestamp in seconds based on the index of an audio frame, the sample rate, and number of samples
+        /// </summary>
+        /// <param name="index"></param>
+        /// <param name="sampleRate"></param>
+        /// <param name="numSamples"></param>
+        /// <returns></returns>
+        public static double FrameIndexToTimestamp(int index, int sampleRate, int numSamples)
+        {
+            if (sampleRate <= 0)
+            {
+                throw new ArgumentException("Sample rate must be positive");
+            }
+
+            return index * ((double)numSamples / sampleRate);
         }
 
         static void Main(string[] args)
@@ -73,7 +89,7 @@ namespace AttributeExtractionProofOfConcept
             sampleSource = waveSource.ToSampleSource();
 
             FftProvider fftProvider = new FftProvider(sampleSource.WaveFormat.Channels, FftSize.Fft1024);
-            Dictionary<int, Complex[]> fftResults = new Dictionary<int, Complex[]>();
+            List<Tuple<int, Complex[]>> fftResults = new List<Tuple<int, Complex[]>>();
             int i = 0;
 
             // Scrub through the audio 1024 samples at a time and extract fft info
@@ -86,7 +102,7 @@ namespace AttributeExtractionProofOfConcept
                 Complex[] result = new Complex[(int)fftProvider.FftSize];
                 if (fftProvider.GetFftData(result))
                 {
-                    fftResults.Add(i, result);
+                    fftResults.Add(new Tuple<int, Complex[]>(i, result));
                     ++i;
                 }
             }
@@ -98,13 +114,13 @@ namespace AttributeExtractionProofOfConcept
             i = 0;
 
             // For each fft output
-            foreach (var kvp in fftResults)
+            foreach (var pair in fftResults)
             {
                 // The output of the fft has a frequency domain and amplitude.
                 // In this case, the index of the value represents frequency: index * ((sampleRate / 2) / (vals.Length / 2))
                 // The value at an index is the amplitude as a complex number. To normalize, calculate: sqrt(real^2 + imaginary^2), this can then be
                 // used to calculate dB level with dBspl equation (20 * log10(normal))
-                Complex[] vals = kvp.Value;
+                Complex[] vals = pair.Item2;
 
                 // Frequency buckets produced by fft. Size of each bucket depends on sample rate.
                 // 0 to N/2 of fft is what we want, N/2 to N is garbage (negative frequencies)
@@ -133,7 +149,7 @@ namespace AttributeExtractionProofOfConcept
                 }
                 if (fundFreq != 0)
                 {
-                    amplitude = 20 * Math.Log10(fundFreq);   // Convert to dB
+                    amplitude = 20 * Math.Log10(normals[freqBucket]);   // Convert to dB
                 }
 
                 fundFreqs.Add(new Tuple<double, double>(fundFreq, amplitude));
@@ -141,6 +157,30 @@ namespace AttributeExtractionProofOfConcept
             }
 
             Console.WriteLine("Fundamental frequency analysis of each frame done");
+
+            Console.WriteLine("Writing results to csv (timestamp,frequency,amplitude)...");
+
+            try
+            {
+                FileStream outFileStream = File.Create("out.csv");
+                StreamWriter writer = new StreamWriter(outFileStream);
+
+                for (int j = 0; j < fundFreqs.Count; ++j)
+                {
+                    writer.WriteLine(string.Format("{0},{1},{2}", FrameIndexToTimestamp(j, sampleSource.WaveFormat.SampleRate, 1024), fundFreqs[j].Item1, fundFreqs[j].Item2));
+                }
+
+                writer.Close();
+                outFileStream.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("failed to write output:");
+                Console.Error.WriteLine(ex.ToString());
+            }
+
+            Console.WriteLine("Done");
+            Console.ReadKey(true);
         }
     }
 }
