@@ -13,6 +13,32 @@ namespace AttributeExtractionProofOfConcept
 {
     class Program
     {
+        /// <summary>
+        /// Simple function to find the index of the max value in a double array
+        /// Thanks Jon Skeet: https://stackoverflow.com/a/462725
+        /// </summary>
+        /// <param name="sequence"></param>
+        /// <returns></returns>
+        public static int MaxIndex(double[] sequence)
+        {
+            int maxIndex = -1;
+            double maxValue = double.MinValue;
+
+            int i = 0;
+            foreach (double d in sequence)
+            {
+                if (d > maxValue)
+                {
+                    maxValue = d;
+                    maxIndex = i;
+                }
+
+                ++i;
+            }
+
+            return maxIndex;
+        }
+
         static void Main(string[] args)
         {
             // Validate cmd line args
@@ -67,12 +93,28 @@ namespace AttributeExtractionProofOfConcept
 
             Console.WriteLine("FFT done");
 
-            double[] fundFreqs = new double[fftResults.Count];      // Stores the fundamental frequency at each frame (every 1024 samples)
+            // Stores the fundamental frequency and amplitude at each frame (1024 samples)
+            List<Tuple<double, double>> fundFreqs = new List<Tuple<double, double>>();
             i = 0;
+
+            // For each fft output
             foreach (var kvp in fftResults)
             {
+                // The output of the fft has a frequency domain and amplitude.
+                // In this case, the index of the value represents frequency: index * ((sampleRate / 2) / (vals.Length / 2))
+                // The value at an index is the amplitude as a complex number. To normalize, calculate: sqrt(real^2 + imaginary^2), this can then be
+                // used to calculate dB level with dBspl equation (20 * log10(normal))
                 Complex[] vals = kvp.Value;
-                int nyquistLength = kvp.Value.Length / 2;
+
+                // Frequency buckets produced by fft. Size of each bucket depends on sample rate.
+                // 0 to N/2 of fft is what we want, N/2 to N is garbage (negative frequencies)
+                int nyquistLength = vals.Length / 2;
+
+                // Nyquist rate is maximum possible reproducible sample frequency of a given sample rate
+                int nyquistRate = sampleSource.WaveFormat.SampleRate / 2;
+                
+
+                // Normalize the amplitudes
                 double[] normals = new double[nyquistLength];
 
                 for (int j = 0; j < nyquistLength; ++j)
@@ -80,12 +122,21 @@ namespace AttributeExtractionProofOfConcept
                     normals[j] = Math.Sqrt(Math.Pow(vals[j].Real, 2) + Math.Pow(vals[j].Imaginary, 2));
                 }
 
-                double fundFreq = normals.Max();
+                // Find the fundamental frequency and amplitude of that frequency
+                double fundFreq = 0;
+                double amplitude = double.NegativeInfinity; // in dB spl
+
+                int freqBucket = MaxIndex(normals);
+                if (freqBucket > 0)
+                {
+                    fundFreq = freqBucket * (nyquistRate / nyquistLength);
+                }
                 if (fundFreq != 0)
                 {
-                    fundFreq = (i * (waveSource.WaveFormat.SampleRate / 2)) / ((int)fftProvider.FftSize / 2);
+                    amplitude = 20 * Math.Log10(fundFreq);   // Convert to dB
                 }
-                fundFreqs[i] = fundFreq;
+
+                fundFreqs.Add(new Tuple<double, double>(fundFreq, amplitude));
                 ++i;
             }
 
