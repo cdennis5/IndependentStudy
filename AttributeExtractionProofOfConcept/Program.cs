@@ -55,6 +55,10 @@ namespace AttributeExtractionProofOfConcept
             return index * ((double)numSamples / sampleRate);
         }
 
+        /// <summary>
+        /// Entry point
+        /// </summary>
+        /// <param name="args"></param>
         static void Main(string[] args)
         {
             // Validate cmd line args
@@ -92,7 +96,7 @@ namespace AttributeExtractionProofOfConcept
             List<Tuple<int, Complex[]>> fftResults = new List<Tuple<int, Complex[]>>();
             int i = 0;
 
-            // Scrub through the audio 1024 samples at a time and extract fft info
+            // Scrub through the audio 1024 samples at a time and perform fft on each chunk
             while (sampleSource.Position < sampleSource.Length)
             {
                 float[] samples = new float[1024];
@@ -116,14 +120,14 @@ namespace AttributeExtractionProofOfConcept
             // For each fft output
             foreach (var pair in fftResults)
             {
-                // The output of the fft has a frequency domain and amplitude.
+                // The output of the fft has a frequency domain and amplitude range.
                 // In this case, the index of the value represents frequency: index * ((sampleRate / 2) / (vals.Length / 2))
                 // The value at an index is the amplitude as a complex number. To normalize, calculate: sqrt(real^2 + imaginary^2), this can then be
                 // used to calculate dB level with dBspl equation (20 * log10(normal))
                 Complex[] vals = pair.Item2;
 
                 // Frequency buckets produced by fft. Size of each bucket depends on sample rate.
-                // 0 to N/2 of fft is what we want, N/2 to N is garbage (negative frequencies)
+                // 0 to N/2 of fft output is what we want, N/2 to N is garbage (negative frequencies)
                 int nyquistLength = vals.Length / 2;
 
                 // Nyquist rate is maximum possible reproducible sample frequency of a given sample rate
@@ -160,10 +164,12 @@ namespace AttributeExtractionProofOfConcept
 
             Console.WriteLine("Writing results to csv (timestamp,frequency,amplitude)...");
 
+            FileStream outFileStream = null;
+            StreamWriter writer = null;
             try
             {
-                FileStream outFileStream = File.Create("out.csv");
-                StreamWriter writer = new StreamWriter(outFileStream);
+                outFileStream = File.Create("out.csv");
+                writer = new StreamWriter(outFileStream);
 
                 for (int j = 0; j < fundFreqs.Count; ++j)
                 {
@@ -177,6 +183,11 @@ namespace AttributeExtractionProofOfConcept
             {
                 Console.Error.WriteLine("failed to write output:");
                 Console.Error.WriteLine(ex.ToString());
+
+                if (outFileStream != null)
+                    outFileStream.Close();
+                if (writer != null)
+                    writer.Close();
             }
 
             Console.WriteLine("Done");
